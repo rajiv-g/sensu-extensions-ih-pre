@@ -134,6 +134,23 @@ module Sensu::Extension
                 tags = create_tags(client_tags.merge(check_tags).merge(event_tags))
               end
 
+              # Allow Output formats
+              output_formats = event['check']['influxdb']['output_formats'] if event['check']['influxdb'] && event['check']['influxdb']['output_formats']
+              custom_tags = {}
+              if output_formats
+                key_array = measurement.split('.')
+                output_formats.each do |format|
+                  format_array = format.split('.')
+                  next unless format_array.length == key_array.length
+                  format_array.zip(key_array).each do |k, v|
+                    custom_tags[k] = v
+                  end
+                end
+              end
+              measurement = event['check']['name'] unless event['check']['name'].nil?
+              tags = create_tags(client_tags.merge(check_tags).merge(custom_tags))
+              # End of Output formats
+              
               point = "#{measurement}#{tags} value=#{field_value} #{timestamp}"
             end
 

@@ -97,6 +97,24 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[0]).to eq("rspec,a=1,b=1,c=1,x=1,y=1,z=1 value=69 1480697845")
   end
 
+  it "Accepting output formats" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.apache.request 69 1480697845",
+        "influxdb" => {"output_formats" => ['host.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,metric=request,type=apache value=69 1480697845")
+  end
+
   it "does not modify input in proxy mode" do
     @extension.run(minimal_event_proxy.to_json) do end
 

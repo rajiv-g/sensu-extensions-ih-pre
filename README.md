@@ -1,7 +1,6 @@
 # sensu-influxdb-extension
 
-![Gem Version](https://badge.fury.io/rb/sensu-extensions-influxdb.svg)
-![circle ci build status](https://circleci.com/gh/jhrv/sensu-influxdb-extension.png?circle-token=:circle-token)
+![build status](https://travis-ci.org/rajiv-g/sensu-influxdb-extension.svg)
 
 [Sensu](https://sensuapp.org/) extension for sending metrics to [InfluxDB](https://influxdb.com/) using [line protocol](https://docs.influxdata.com/influxdb/latest/write_protocols/line_protocol_reference).
 
@@ -228,6 +227,26 @@ Register the additional handlers:
  }
 
 ```
+
+## Output Options
+
+Added output_formats option to list the array used to use tags.
+Example -
+Let's say we configured the sensu check output to be :
+Note: Check name is specified in handler
+
+```
+host1.downloads.iOS 26 1476047752
+host1.downloads.android 52 1476047752
+host2.mail.others 12 1476047752
+```
+The extension will split the output of the measurement. Then it will slice it into tag key and values. From above example, the transformed output will be -
+```
+measurement = check_name,host=host1, type=downloads, metric=iOS value = 26, timestamp = 1476047752 
+measurement = check_name,host=host1, type=downloads, metric=android value = 52, timestamp = 1476047752
+measurement = check_name,host=host2, type=mail, metric=others value = 12, timestamp = 1476047752
+```
+
 
 ## Performance
 
