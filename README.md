@@ -246,7 +246,27 @@ measurement = check_name,host=host1, type=downloads, metric=iOS value = 26, time
 measurement = check_name,host=host1, type=downloads, metric=android value = 52, timestamp = 1476047752
 measurement = check_name,host=host2, type=mail, metric=others value = 12, timestamp = 1476047752
 ```
+### Using '_' to ignore unwanted tags
+Example:
 
+```
+host1.downloads.iOS 26 1476047752
+host1.downloads.android 52 1476047752
+host2.mail.others 12 1476047752
+```
+with format option
+
+```
+['_.type.metric']
+```
+
+yields
+
+```
+measurement = check_name, type=downloads, metric=iOS value = 26, timestamp = 1476047752 
+measurement = check_name, type=downloads, metric=android value = 52, timestamp = 1476047752
+measurement = check_name, type=mail, metric=others value = 12, timestamp = 1476047752
+```
 
 ## Performance
 

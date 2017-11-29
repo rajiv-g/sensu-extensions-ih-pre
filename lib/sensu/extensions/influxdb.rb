@@ -143,6 +143,7 @@ module Sensu::Extension
                   format_array = format.split('.')
                   next unless format_array.length == key_array.length
                   format_array.zip(key_array).each do |k, v|
+                    next if k == '_' # Ignore tagging when using _ placeholder.
                     custom_tags[k] = v
                   end
                 end

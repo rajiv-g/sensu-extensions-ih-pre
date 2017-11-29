@@ -115,6 +115,24 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[0]).to eq("check_name,host=host_name,metric=request,type=apache value=69 1480697845")
   end
 
+  it "Accepting underscore in formats" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.apache.unwanted.request 69 1480697845",
+        "influxdb" => {"output_formats" => ['host.type._.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,metric=request,type=apache value=69 1480697845")
+  end
+
   it "does not modify input in proxy mode" do
     @extension.run(minimal_event_proxy.to_json) do end
 
