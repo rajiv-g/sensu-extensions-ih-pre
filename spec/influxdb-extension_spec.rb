@@ -24,7 +24,7 @@ describe "Sensu::Extension::InfluxDB" do
   it "processes minimal event" do
     @extension.run(minimal_event.to_json) do 
       buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
-      expect(buffer[0]).to eq("rspec value=69 1480697845")
+      expect(buffer[0]).to eq("check_name rspec=69 1480697845")
     end
   end
 
@@ -35,6 +35,7 @@ describe "Sensu::Extension::InfluxDB" do
         "name" => "rspec"
       },
       "check" => {
+        "name" => "check_name",
         "output" => "rspec 69 invalid"
       }
     }
@@ -82,6 +83,7 @@ describe "Sensu::Extension::InfluxDB" do
         }
       },
       "check" => {
+        "name" => "check_name",
         "output" => "rspec 69 1480697845",
         "tags" => {
           "b" => "1",
@@ -94,7 +96,7 @@ describe "Sensu::Extension::InfluxDB" do
     @extension.run(event.to_json) do end
 
     buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
-    expect(buffer[0]).to eq("rspec,a=1,b=1,c=1,x=1,y=1,z=1 value=69 1480697845")
+    expect(buffer[0]).to eq("check_name,a=1,b=1,c=1,x=1,y=1,z=1 rspec=69 1480697845")
   end
 
   it "Accepting output formats" do
@@ -112,7 +114,7 @@ describe "Sensu::Extension::InfluxDB" do
     @extension.run(event.to_json) do end
 
     buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
-    expect(buffer[0]).to eq("check_name,host=host_name,metric=request,type=apache value=69 1480697845")
+    expect(buffer[0]).to eq("check_name,host=host_name,type=apache request=69 1480697845")
   end
 
   it "Accepting underscore in formats" do
@@ -130,7 +132,44 @@ describe "Sensu::Extension::InfluxDB" do
     @extension.run(event.to_json) do end
 
     buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
-    expect(buffer[0]).to eq("check_name,host=host_name,metric=request,type=apache value=69 1480697845")
+    expect(buffer[0]).to eq("check_name,host=host_name,type=apache request=69 1480697845")
+  end
+
+  it "Accepting fieldset with same tagset" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.apache.unwanted.request 69 1480697845\nhost_name.apache.unwanted.errors 1 1480697845",
+        "influxdb" => {"output_formats" => ['host.type._.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=apache request=69,errors=1 1480697845")
+  end
+
+  it "Accepting fieldset with different tagset" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.server1.unwanted.request 69 1480697845\nhost_name.server2.unwanted.errors 1 1480697845",
+        "influxdb" => {"output_formats" => ['host.type._.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=server1 request=69 1480697845")
+    expect(buffer[1]).to eq("check_name,host=host_name,type=server2 errors=1 1480697845")
   end
 
   it "does not modify input in proxy mode" do
@@ -148,6 +187,7 @@ def minimal_event
         "name" => "rspec"
       },
       "check" => {
+        "name" => "check_name",
         "output" => "rspec 69 1480697845"
       }
     }
@@ -159,6 +199,7 @@ def minimal_event_proxy
         "name" => "rspec"
       },
       "check" => {
+        "check_name" => "check_name",
         "handlers" => ["proxy"],
         "output" => "rspec 69 1480697845"
       }
