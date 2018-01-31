@@ -114,50 +114,79 @@ module Sensu::Extension
           tags = create_tags(client_tags.merge(check_tags))
         end
 
+        point_set = [] # Used to store the tags & field set in the format point_set = [ {tags: {}, fields: {}}, {tags: {}, fields: {}}, ... ]
+        timestamp = nil # Store the time stamp of any one field
+
         output.split(/\r\n|\n/).each do |point|
-            if not handler["proxy_mode"]
-              measurement, field_value, timestamp = point.split(/\s+/)
+          if not handler["proxy_mode"]
+            measurement, field_value, timestamp = point.split(/\s+/)
 
-              if not is_number?(timestamp)
-                @logger.debug("invalid timestamp, skipping line in event #{event}")
-                next
-              end
-
-              # Get event output tags
-              if measurement.include?('eventtags')
-                only_measurement, tagstub = measurement.split('.eventtags.',2)
-                event_tags = Hash.new()
-                tagstub.split('.').each_slice(2) do |key, value|
-                  event_tags[key] = value
-                end
-                measurement = only_measurement
-                tags = create_tags(client_tags.merge(check_tags).merge(event_tags))
-              end
-
-              # Allow Output formats
-              output_formats = event['check']['influxdb']['output_formats'] if event['check']['influxdb'] && event['check']['influxdb']['output_formats']
-              custom_tags = {}
-              if output_formats
-                key_array = measurement.split('.')
-                output_formats.each do |format|
-                  format_array = format.split('.')
-                  next unless format_array.length == key_array.length
-                  format_array.zip(key_array).each do |k, v|
-                    next if k == '_' # Ignore tagging when using _ placeholder.
-                    custom_tags[k] = v
-                  end
-                end
-              end
-              measurement = event['check']['name'] unless event['check']['name'].nil?
-              tags = create_tags(client_tags.merge(check_tags).merge(custom_tags))
-              # End of Output formats
-              
-              point = "#{measurement}#{tags} value=#{field_value} #{timestamp}"
+            if not is_number?(timestamp)
+              @logger.debug("invalid timestamp, skipping line in event #{event}")
+              next
             end
 
+            # Get event output tags
+            if measurement.include?('eventtags')
+              only_measurement, tagstub = measurement.split('.eventtags.',2)
+              event_tags = Hash.new()
+              tagstub.split('.').each_slice(2) do |key, value|
+                event_tags[key] = value
+              end
+              measurement = only_measurement
+              tags = create_tags(client_tags.merge(check_tags).merge(event_tags))
+            end
+
+            # Allow Output formats
+            output_formats = event['check']['influxdb']['output_formats'] if event['check']['influxdb'] && event['check']['influxdb']['output_formats']
+            custom_tags = {}
+            metric = measurement
+
+            if output_formats
+              key_array = measurement.split('.')
+              output_formats.each do |format|
+                format_array = format.split('.')
+                next unless format_array.length == key_array.length
+                format_array.zip(key_array).each do |k, v|
+                  next if k == '_' # Ignore tagging when using _ placeholder.
+                  if k == 'metric'
+                    metric = v
+                    next
+                  end
+                  custom_tags[k] = v
+                end
+              end
+            else
+              custom_tags['metric'] = measurement
+            end
+
+            # Check already tags present in point set.
+            tags_match = false
+            point_set.each do |point|
+              if point['tags'] == custom_tags
+                point['fields'][metric] = field_value
+                tags_match = true
+                break
+              end
+            end
+
+            # Create the new tag set if point_set tags not match
+            unless tags_match
+              point_set << {'tags' => custom_tags, 'fields' => {metric => field_value} }
+            end
+          else
             handler["buffer"].push(point)
-            @logger.debug("#{@@extension_name}: stored point in buffer (#{handler['buffer'].length}/#{handler['buffer_size']})")
+          end
         end
+        measurement = event['check']['name'] unless event['check']['name'].nil?
+        point_set.each do |point|
+          tags = create_tags(client_tags.merge(check_tags).merge(point['tags'])) # metric tags are ignored and moved to field
+          fields = point['fields'].map{|k,v| "#{k}=#{v}"}.join(',')
+          point = "#{measurement}#{tags} #{fields} #{timestamp}"
+          handler["buffer"].push(point)
+          @logger.debug("#{@@extension_name}: stored point in buffer (#{handler['buffer'].length}/#{handler['buffer_size']})")
+        end
+        # End of Output formats
         yield 'ok', 0
       rescue => e
         @logger.error("#{@@extension_name}: unable to handle event #{event} - #{e}")
@@ -173,7 +202,7 @@ module Sensu::Extension
             tag_string = ""
 
             sorted_tags.each do |tag, value|
-                next if value.to_s.empty? # skips tags without values
+                next if value.to_s.empty? or tag == 'metric' # skips tags without values & metric
                 tag_string += ",#{tag}=#{value}"
             end
 
