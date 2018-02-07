@@ -267,6 +267,26 @@ measurement = check_name, type=downloads, metric=iOS value = 26, timestamp = 147
 measurement = check_name, type=downloads, metric=android value = 52, timestamp = 1476047752
 measurement = check_name, type=mail, metric=others value = 12, timestamp = 1476047752
 ```
+### Ignore Fields
+Example:
+
+```
+host1.downloads.version 1.1.0 1476047752
+host1.downloads.android 52 1476047752
+host2.mail.others 12 1476047752
+```
+with ignore_fields as
+
+```
+['version']
+```
+
+yields
+
+```
+measurement = check_name, type=downloads, metric=android value = 52, timestamp = 1476047752
+measurement = check_name, type=mail, metric=others value = 12, timestamp = 1476047752
+```
 
 ## Performance
 
