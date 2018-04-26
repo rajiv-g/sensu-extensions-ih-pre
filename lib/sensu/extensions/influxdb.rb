@@ -121,7 +121,7 @@ module Sensu::Extension
           if not handler["proxy_mode"]
             measurement, field_value, timestamp = point.split(/\s+/)
             key_array = measurement.split('.')
-            next if event['check']['influxdb']['ignore_fields'].include? key_array[-1] if event['check']['influxdb'] && event['check']['influxdb']['ignore_fields']
+            next if event['check']['influxdb']['ignore_fields'].any? { |f| measurement[f] } if event['check']['influxdb'] && event['check']['influxdb']['ignore_fields']
 
             if not is_number?(timestamp)
               @logger.debug("invalid timestamp, skipping line in event #{event}")
@@ -147,12 +147,16 @@ module Sensu::Extension
             if output_formats
               output_formats.each do |format|
                 format_array = format.split('.')
-                next unless format_array.length == key_array.length
+                next unless (format_array.length == key_array.length or format_array.include? 'metric*')
                 format_array.zip(key_array).each do |k, v|
                   next if k == '_' # Ignore tagging when using _ placeholder.
                   if k == 'metric'
                     metric = v
                     next
+                  end
+                  if k == 'metric*'
+                    metric = measurement[/(#{v}.*)/] # Extract all parts from here
+                    break
                   end
                   custom_tags[k] = v
                 end
