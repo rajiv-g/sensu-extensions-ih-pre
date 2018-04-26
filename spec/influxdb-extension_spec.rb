@@ -210,6 +210,121 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[1]).to eq(nil)
   end
 
+  it "Accepting metric*" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.server1.unwanted.request 69 1480697845",
+        "influxdb" => {"output_formats" => ['host.metric*']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name server1.unwanted.request=69 1480697845")
+    expect(buffer[1]).to eq(nil)
+  end
+
+  it "Accepting metric* with underscore _" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.server1.unwanted.request 69 1480697845",
+        "influxdb" => {"output_formats" => ['_.metric*']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name server1.unwanted.request=69 1480697845")
+    expect(buffer[1]).to eq(nil)
+  end
+
+  it "Accepting metric* with same tagset" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.apache.unwanted.request 69 1480697845\nhost_name.apache.unwanted.errors 1 1480697845",
+        "influxdb" => {"output_formats" => ['host.type.metric*']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=apache unwanted.request=69,unwanted.errors=1 1480697845")
+    expect(buffer[1]).to eq(nil)
+  end
+
+  it "Accepting metric* with different tagset" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.server1.unwanted.request 69 1480697845\nhost_name.server1.unwanted.timeout 0 1480697845\nhost_name.server1.unwanted.request1 69 1480697845\nhost_name.server2.unwanted.errors 1 1480697845",
+        "influxdb" => {"output_formats" => ['host.type.metric*']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=server1 unwanted.request=69,unwanted.timeout=0,unwanted.request1=69 1480697845")
+    expect(buffer[1]).to eq("check_name,host=host_name,type=server2 unwanted.errors=1 1480697845")
+    expect(buffer[2]).to eq(nil)
+  end
+
+  it "Accepting metgric*, ignoring fields different tags" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.server1.unwanted.request 69 1480697845\nhost_name.server1.unwanted.timeout 0 1480697845\nhost_name.server1.unwanted.request1 69 1480697845\nhost_name.server2.unwanted.errors 1 1480697845",
+        "influxdb" => {"output_formats" => ['host.type.metric*'], "ignore_fields" => ['unwanted.request', 'unwanted.request1']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=server1 unwanted.timeout=0 1480697845")
+    expect(buffer[1]).to eq("check_name,host=host_name,type=server2 unwanted.errors=1 1480697845")
+  end
+
+  it "Accepting metric*, ignoring fields with same tags" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.server1.unwanted.request 69 1480697845\nhost_name.server1.unwanted.timeout 0 1480697845\nhost_name.server1.unwanted.request1 69 1480697845\nhost_name.server1.unwanted.errors 1 1480697845",
+        "influxdb" => {"output_formats" => ['host.type.metric*'], "ignore_fields" => ['unwanted.request', 'unwanted.request1']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=server1 unwanted.timeout=0,unwanted.errors=1 1480697845")
+    expect(buffer[1]).to eq(nil)
+  end
+
   it "does not modify input in proxy mode" do
     @extension.run(minimal_event_proxy.to_json) do end
 
