@@ -325,6 +325,25 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[1]).to eq(nil)
   end
 
+  it "Accepting fieldset with different timestamp as different entry" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.apache.unwanted.request 69 1480697845\nhost_name.apache.unwanted.errors 1 1480697846",
+        "influxdb" => {"output_formats" => ['host.type._.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=apache request=69 1480697845")
+    expect(buffer[1]).to eq("check_name,host=host_name,type=apache errors=1 1480697846")
+  end
+
   it "does not modify input in proxy mode" do
     @extension.run(minimal_event_proxy.to_json) do end
 
