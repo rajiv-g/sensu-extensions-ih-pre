@@ -114,8 +114,8 @@ module Sensu::Extension
           tags = create_tags(client_tags.merge(check_tags))
         end
 
-        point_set = [] # Used to store the tags & field set in the format point_set = [ {tags: {}, fields: {}}, {tags: {}, fields: {}}, ... ]
-        timestamp = nil # Store the time stamp of any one field
+        point_set = [] # Used to store the tags & field set in the format point_set = [ {tags: {}, fields: {}, timestamp:<timestamp>}, {tags: {}, fields: {}, timestamp: <timestamp>}, ... ]
+        # timestamp = nil # Store the time stamp of any one field
 
         output.split(/\r\n|\n/).each do |point|
           if not handler["proxy_mode"]
@@ -166,18 +166,18 @@ module Sensu::Extension
             end
 
             # Check already tags present in point set.
-            tags_match = false
+            tags_timestamp_match = false
             point_set.each do |point|
-              if point['tags'] == custom_tags
+              if point['tags'] == custom_tags && point['timestamp'] == timestamp
                 point['fields'][metric] = field_value
-                tags_match = true
+                tags_timestamp_match = true
                 break
               end
             end
 
             # Create the new tag set if point_set tags not match
-            unless tags_match
-              point_set << {'tags' => custom_tags, 'fields' => {metric => field_value} }
+            unless tags_timestamp_match
+              point_set << {'tags' => custom_tags, 'fields' => {metric => field_value}, 'timestamp' => timestamp }
             end
           else
             handler["buffer"].push(point)
@@ -187,6 +187,7 @@ module Sensu::Extension
         point_set.each do |point|
           tags = create_tags(client_tags.merge(check_tags).merge(point['tags'])) # metric tags are ignored and moved to field
           fields = point['fields'].map{|k,v| "#{k}=#{v}"}.join(',')
+          timestamp = point['timestamp']
           point = "#{measurement}#{tags} #{fields} #{timestamp}"
           handler["buffer"].push(point)
           @logger.debug("#{@@extension_name}: stored point in buffer (#{handler['buffer'].length}/#{handler['buffer_size']})")

@@ -287,6 +287,25 @@ yields
 measurement = check_name, type=downloads, metric=android value = 52, timestamp = 1476047752
 measurement = check_name, type=mail, metric=others value = 12, timestamp = 1476047752
 ```
+### Using 'metric*' to capture multiple parts (parts are seperated by dots)
+Example:
+
+```
+host1.downloads.iOS 26 1476047752
+host1.downloads.android 52 1476047752
+host2.mail.others 12 1476047752
+```
+with format option
+
+```
+['_.metric*']
+```
+
+yields in InfluxDB format as
+
+```
+measuremencheck_name downloads.iOS=26,downloads.android=52,mail.others=12 1476047752
+```
 
 ## Performance
 
