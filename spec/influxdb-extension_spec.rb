@@ -325,6 +325,44 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[1]).to eq(nil)
   end
 
+  it "Accepting metric*, in order, metric as priority" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.server1.unwanted.request 69 1480697845\nhost_name.server1.unwanted.timeout 0 1480697845\nhost_name.server1.unwanted.request1 69 1480697845\nhost_name.server1.unwanted.errors 1 1480697845",
+        "influxdb" => {"output_formats" => ['_._._.metric', '_.metric*']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name request=69,timeout=0,request1=69,errors=1 1480697845")
+    expect(buffer[1]).to eq(nil)
+  end
+
+  it "Accepting metric*, in order, metric* as priority" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.server1.unwanted.request 69 1480697845\nhost_name.server1.unwanted.timeout 0 1480697845\nhost_name.server1.unwanted.request1 69 1480697845\nhost_name.server1.unwanted.errors 1 1480697845",
+        "influxdb" => {"output_formats" => ['_.metric*','_._._.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name server1.unwanted.request=69,server1.unwanted.timeout=0,server1.unwanted.request1=69,server1.unwanted.errors=1 1480697845")
+    expect(buffer[1]).to eq(nil)
+  end
+
   it "Accepting fieldset with different timestamp as different entry" do
     event = {
       "client" => {
