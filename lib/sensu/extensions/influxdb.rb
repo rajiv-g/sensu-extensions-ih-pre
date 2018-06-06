@@ -145,9 +145,12 @@ module Sensu::Extension
             metric = measurement
 
             if output_formats
+              output_formats_matched = false
               output_formats.each do |format|
+                break if output_formats_matched
                 format_array = format.split('.')
                 next unless (format_array.length == key_array.length or format_array.include? 'metric*')
+                output_formats_matched = true
                 format_array.zip(key_array).each do |k, v|
                   next if k == '_' # Ignore tagging when using _ placeholder.
                   if k == 'metric'
