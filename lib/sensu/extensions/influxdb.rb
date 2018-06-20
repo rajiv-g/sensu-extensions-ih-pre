@@ -119,7 +119,13 @@ module Sensu::Extension
 
         output.split(/\r\n|\n/).each do |point|
           if not handler["proxy_mode"]
-            measurement, field_value, timestamp = point.split(/\s+/)
+            measurement, field_value, timestamp = point.scan(/'([^']+)'|"([^"]+)"|(\S+)/).flatten.compact
+
+            # Accept string fields
+            string_fields = []
+            string_fields = event['check']['influxdb']['string_fields'] if event['check']['influxdb'] && event['check']['influxdb']['string_fields']
+            field_value = (!is_number?(field_value) || string_fields.any? { |f| measurement.include? f }) ? "\"#{field_value}\"" : field_value
+
             key_array = measurement.split('.')
             next if event['check']['influxdb']['ignore_fields'].any? { |f| measurement[f] } if event['check']['influxdb'] && event['check']['influxdb']['ignore_fields']
 
@@ -261,7 +267,7 @@ module Sensu::Extension
     end
 
     def is_number?(input)
-      true if Integer(input) rescue false
+      true if Float(input) rescue false
     end
   end
 end
