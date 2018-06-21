@@ -382,6 +382,60 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[1]).to eq("check_name,host=host_name,type=apache errors=1 1480697846")
   end
 
+  it "Accepting field in between" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.apache.unwanted.request.x 69 1480697845\nhost_name.apache.unwanted.errors 1 1480697846",
+        "influxdb" => {"output_formats" => ['host.type._.metric._']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=apache request=69 1480697845")
+  end
+
+  it "Accepting string values" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.apache.version 1.0.2 1480697845\nhost_name.apache.license MIT 1480697845\nhost_name.apache.contrib \"X, Y\" 1480697845",
+        "influxdb" => {"output_formats" => ['host.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=apache version=\"1.0.2\",license=\"MIT\",contrib=\"X, Y\" 1480697845")
+  end
+
+  it "Accepting explicit string values" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "check_name",
+        "output" => "host_name.apache.version 1.0 1480697845\nhost_name.apache.subver 2.3 1480697845\n",
+        "influxdb" => {"output_formats" => ['host.type.metric'], "string_fields" => ["version"] }
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("check_name,host=host_name,type=apache version=\"1.0\",subver=2.3 1480697845")
+  end
+
   it "does not modify input in proxy mode" do
     @extension.run(minimal_event_proxy.to_json) do end
 

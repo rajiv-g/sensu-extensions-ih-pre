@@ -307,6 +307,28 @@ yields in InfluxDB format as
 measuremencheck_name downloads.iOS=26,downloads.android=52,mail.others=12 1476047752
 ```
 
+### String Fields
+Example:
+
+By default extension will identify datatype based on its value. If you want to explicitly set the string field, include field name in string_fields array.
+```
+host1.downloads.version 1.0 1476047752
+host1.downloads.android 52 1476047752
+host2.mail.others 12 1476047752
+```
+with string_fields as
+
+```
+['version']
+```
+
+yields
+
+```
+measurement = check_name, type=downloads, version="1.0",android=52 timestamp = 1476047752
+measurement = check_name, type=mail, others=12 timestamp = 1476047752
+```
+
 ## Performance
 
 The extension will buffer up points until it reaches the configured **buffer_size** length or **buffer_max_age**, and then post all the points in the buffer to InfluxDB. 
