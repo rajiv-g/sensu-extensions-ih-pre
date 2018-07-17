@@ -116,6 +116,7 @@ module Sensu::Extension
 
         point_set = [] # Used to store the tags & field set in the format point_set = [ {tags: {}, fields: {}, timestamp:<timestamp>}, {tags: {}, fields: {}, timestamp: <timestamp>}, ... ]
         # timestamp = nil # Store the time stamp of any one field
+        key_array = [] # Used to store metric parts thereby access prefix
 
         output.split(/\r\n|\n/).each do |point|
           if not handler["proxy_mode"]
@@ -192,7 +193,9 @@ module Sensu::Extension
             handler["buffer"].push(point)
           end
         end
-        measurement = event['check']['name'] unless event['check']['name'].nil?
+        if event['check']['name']
+          measurement = event['check']['name'] == 'statsd' ? key_array[0] : event['check']['name']
+        end
         point_set.each do |point|
           tags = create_tags(client_tags.merge(check_tags).merge(point['tags'])) # metric tags are ignored and moved to field
           fields = point['fields'].map{|k,v| "#{k}=#{v}"}.join(',')
