@@ -436,6 +436,42 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[0]).to eq("check_name,host=host_name,type=apache version=\"1.0\",subver=2.3 1480697845")
   end
 
+  it "Prefix as measurement in statsd check" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "statsd",
+        "output" => "prefix.host_name.apache.version 1.0 1480697845\nprefix.host_name.apache.subversion 1.1 1480697845\nprefix.host_name.nginx.version 2.3 1480697845\n",
+        "influxdb" => {"output_formats" => ['_.host.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("prefix,host=host_name,type=apache version=1.0,subversion=1.1 1480697845")
+    expect(buffer[1]).to eq("prefix,host=host_name,type=nginx version=2.3 1480697845")
+  end
+
+  it "Prefix as measurement in statsd check, no tags, no matchers" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "statsd",
+        "output" => "prefix 1.0 1480697845",
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("prefix prefix=1.0 1480697845")
+  end
+
   it "does not modify input in proxy mode" do
     @extension.run(minimal_event_proxy.to_json) do end
 
