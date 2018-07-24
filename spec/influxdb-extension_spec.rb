@@ -574,6 +574,32 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[0]).to eq("measurement_all metric1=1.0 1480697845")
   end
 
+  it "Accept measurement format also in checks" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "random1",
+        "output" => "statsd.timers.embedded.metric1 1.0 1480697845\nstatsd.timers.tag.metric1 1.0 1480697845",
+        "influxdb" => {"output_formats" => [{measurement_name: 'embedded', measurement_formats: ['_._.measurement.metric']}, '_._.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("embedded metric1=1.0 1480697845")
+    expect(buffer[1]).to eq("random1,type=tag metric1=1.0 1480697845")
+  end
+
+  it "does not modify input in proxy mode" do
+    @extension.run(minimal_event_proxy.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["proxy"]["buffer"]
+    expect(buffer[0]).to eq("rspec 69 1480697845")
+  end
+
 end
 
 def minimal_event

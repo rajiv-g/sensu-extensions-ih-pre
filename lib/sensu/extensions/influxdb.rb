@@ -117,7 +117,6 @@ module Sensu::Extension
 
         point_set = [] # Used to store the tags & field set in the format point_set = [ {measurement: <measurement_name>, tags: {}, fields: {}, timestamp:<timestamp>}, {tags: {}, fields: {}, timestamp: <timestamp>}, ... ]
         key_array = [] # Used to store metric parts thereby access prefix
-        output_formats = []
         measurement = event['check']['name'] if event['check']['name']
         output.split(/\r\n|\n/).each do |point|
           if not handler["proxy_mode"]
@@ -127,6 +126,7 @@ module Sensu::Extension
             string_fields = []
             string_fields = event['check']['influxdb']['string_fields'] if event['check']['influxdb'] && event['check']['influxdb']['string_fields']
             field_value = (!is_number?(field_value) || string_fields.any? { |f| buckets.include? f }) ? "\"#{field_value}\"" : field_value
+            output_formats = []
             measurement = event['check']['name']
             key_array = buckets.split('.')
             next if event['check']['influxdb']['ignore_fields'].any? { |f| buckets[f] } if event['check']['influxdb'] && event['check']['influxdb']['ignore_fields']
@@ -147,22 +147,18 @@ module Sensu::Extension
               tags = create_tags(client_tags.merge(check_tags).merge(event_tags))
             end
 
-            # List output formats by measurements
-            custom_formats = []
-            handler['custom_measurements'].each do |sfs|
-              if sfs[:apply_only_for_checks]
-                next unless sfs[:apply_only_for_checks].include? event['check']['name'] # Match wih checks
-              end
-              sfs[:measurement_formats].each do |f|
-                custom_formats << {sfs[:measurement_name] => f}
-              end
+            # output formats by measurements
+            custom_formats = process_measurent_formats(handler['custom_measurements'], event['check']['name'])
+            
+            # Allow Output formats, with custom_format has priority
+            processed_output_formats = []
+            raw_output_formats = []
+            raw_output_formats = event['check']['influxdb']['output_formats'] if event['check']['influxdb'] && event['check']['influxdb']['output_formats']
+            raw_output_formats.each do |mformat|
+              processed_output_formats += (mformat.is_a?(Hash) ? process_measurent_formats([mformat], event['check']['name']) : [mformat])
             end
 
-            # Allow Output formats, with custom_format has priority
-            output_formats = event['check']['influxdb']['output_formats'] if event['check']['influxdb'] && event['check']['influxdb']['output_formats']
-            
-            output_formats = custom_formats + output_formats
-            p output_formats if event['check']['name'] == 'random1'
+            output_formats = custom_formats + processed_output_formats
             custom_tags = {}
             metric = buckets
 
@@ -311,5 +307,26 @@ module Sensu::Extension
       end
       return matched
     end
+
+    def process_measurent_formats(measurement_formats, check_name)
+      custom_format = []
+      measurement_formats = symbolize(measurement_formats)
+      measurement_formats.each do |sfs|
+        if sfs[:apply_only_for_checks]
+          next unless sfs[:apply_only_for_checks].include? check_name # Match wih checks
+        end
+        sfs[:measurement_formats].each do |f|
+          custom_format << {sfs[:measurement_name] => f}
+        end
+      end
+      return custom_format
+    end
+
+    def symbolize(obj)
+      return obj.inject({}){|memo,(k,v)| memo[k.to_sym] = symbolize(v); memo} if obj.is_a? Hash
+      return obj.inject([]){|memo,v    | memo << symbolize(v); memo} if obj.is_a? Array
+      return obj
+    end
+
   end
 end
