@@ -11,7 +11,14 @@ describe "Sensu::Extension::InfluxDB" do
         :hostname => "nonexistinghost",
         :additional_handlers => ["proxy"],
         :buffer_size => 5,
-        :buffer_max_age => 1
+        :buffer_max_age => 1,
+        :custom_measurements => [
+          {:measurement_name => 'measurement1', :measurement_formats => ['_._.measurement.htype.metric*', '_.measurement.metric*'], :apply_only_for_checks => ['statsd']},
+          {:measurement_name => 'measurement2', :measurement_formats => ['_._.measurement.htype.metric*','_.measurement.htype.metric*']},
+          {:measurement_name => 'measurement3', :measurement_formats => ['_._.measurement.metric'], :apply_only_for_checks => ['other']},
+          {:measurement_name => 'measurement_all', :measurement_formats => ['_._.measurement.metric']},
+          {:measurement_name => 'measurement_tag', :measurement_formats => ['_._.measurement.metric']},
+        ]
     }
     @extension.settings["proxy"] = {
         :proxy_mode => true
@@ -436,47 +443,135 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[0]).to eq("check_name,host=host_name,type=apache version=\"1.0\",subver=2.3 1480697845")
   end
 
-  it "Prefix as measurement in statsd check" do
+  it "Ensure portability for ouput formats in influxdb" do
     event = {
       "client" => {
         "name" => "rspec"
       },
       "check" => {
         "name" => "statsd",
-        "output" => "prefix.host_name.apache.version 1.0 1480697845\nprefix.host_name.apache.subversion 1.1 1480697845\nprefix.host_name.nginx.version 2.3 1480697845\n",
-        "influxdb" => {"output_formats" => ['_.host.type.metric']}
+        "output" => "statsd.timers.env1.a.b.c 1.0 1480697845\nstatsd.timers.env1.p.q 10.0 1480697845\nstatsd.gauges.env1.a 2.3 1480697845\n",
+        "influxdb" => {"output_formats" => ['_._.type.metric*']}
       }
     }
 
     @extension.run(event.to_json) do end
 
     buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
-    expect(buffer[0]).to eq("prefix,host=host_name,type=apache version=1.0,subversion=1.1 1480697845")
-    expect(buffer[1]).to eq("prefix,host=host_name,type=nginx version=2.3 1480697845")
+    expect(buffer[0]).to eq("statsd,type=env1 a.b.c=1.0,p.q=10.0,a=2.3 1480697845")
   end
 
-  it "Prefix as measurement in statsd check, no tags, no matchers" do
+  it "Measurment based on prefix configured" do
     event = {
       "client" => {
         "name" => "rspec"
       },
       "check" => {
         "name" => "statsd",
-        "output" => "prefix 1.0 1480697845",
+        "output" => "statsd.timers.measurement1.env1.a.b.c 1.0 1480697845\nstatsd.timers.measurement1.env1.a.b.c.d 2.0 1480697845\nstatsd.measurement1.p.q 10.0 1480697845\nstatsd.gauges.measurement2.env1.a 2.3 1480697845\nstatsd.measurement2.env1.b 2.3 1480697845\nstatsd.others.env1.a 1.0 1480697845\n",
+        "influxdb" => {"output_formats" => ['_._.type.metric*']}
       }
     }
 
     @extension.run(event.to_json) do end
 
     buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
-    expect(buffer[0]).to eq("prefix prefix=1.0 1480697845")
+    expect(buffer[0]).to eq("measurement1,htype=env1 a.b.c=1.0,a.b.c.d=2.0 1480697845")
+    expect(buffer[1]).to eq("measurement1 p.q=10.0 1480697845")
+    expect(buffer[2]).to eq("measurement2,htype=env1 a=2.3,b=2.3 1480697845")
+    expect(buffer[3]).to eq("statsd,type=env1 a=1.0 1480697845")
   end
 
-  it "does not modify input in proxy mode" do
-    @extension.run(minimal_event_proxy.to_json) do end
+  it "Ensure Measurement overrides default formats" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "statsd",
+        "output" => "statsd.timers.measurement_tag.metric1 1.0 1480697845",
+        "influxdb" => {"output_formats" => ['_._.type.metric']}
+      }
+    }
 
-    buffer = @extension.instance_variable_get("@handlers")["proxy"]["buffer"]
-    expect(buffer[0]).to eq("rspec 69 1480697845")
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("measurement_tag metric1=1.0 1480697845")
+  end
+
+  it "Ensure Measurement to default formats if doesnt match in measurement priority" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "statsd",
+        "output" => "statsd.timers.tag2.metric1 1.0 1480697845",
+        "influxdb" => {"output_formats" => ['_._.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("statsd,type=tag2 metric1=1.0 1480697845")
+  end
+
+  it "Ensure Measurement filter applied to checks" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "other",
+        "output" => "statsd.timers.tag2.metric1 1.0 1480697845\nstatsd.timers.measurement3.metric1 1.0 1480697845",
+        "influxdb" => {"output_formats" => ['_._.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("other,type=tag2 metric1=1.0 1480697845")
+    expect(buffer[1]).to eq("measurement3 metric1=1.0 1480697845")
+  end
+
+  it "Ensure Measurement filter not applied to other checks" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "other1",
+        "output" => "statsd.timers.tag2.metric1 1.0 1480697845\nstatsd.timers.measurement3.metric1 1.0 1480697845",
+        "influxdb" => {"output_formats" => ['_._.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("other1,type=tag2 metric1=1.0 1480697845")
+    expect(buffer[1]).to eq("other1,type=measurement3 metric1=1.0 1480697845")
+  end
+
+  it "Ensure Measurement filter applied to all checks if not specified" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "random",
+        "output" => "statsd.timers.measurement_all.metric1 1.0 1480697845",
+        "influxdb" => {"output_formats" => ['_._.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("measurement_all metric1=1.0 1480697845")
   end
 
 end

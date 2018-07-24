@@ -53,7 +53,7 @@ module Sensu::Extension
       buffer_size      = config[:buffer_size]
       buffer_max_age   = config[:buffer_max_age]
       proxy_mode       = config[:proxy_mode]
-
+      custom_measurements   = if config.key?(:custom_measurements) then config[:custom_measurements] else [] end
       string = "#{protocol}://#{hostname}:#{port}/write?db=#{database}&precision=#{precision}#{rp_queryparam}#{auth_queryparam}"
       uri = URI(string)
       http = Net::HTTP::new(uri.host, uri.port)
@@ -72,7 +72,8 @@ module Sensu::Extension
         "buffer_flushed" => Time.now.to_i,
         "buffer_size" => buffer_size,
         "buffer_max_age" => buffer_max_age,
-        "proxy_mode" => proxy_mode
+        "proxy_mode" => proxy_mode,
+        "custom_measurements" => custom_measurements
       }
 
       @logger.info("#{name}: successfully initialized handler: hostname: #{hostname}, port: #{port}, database: #{database}, uri: #{uri.to_s}, username: #{username}, buffer_size: #{buffer_size}, buffer_max_age: #{buffer_max_age}")
@@ -114,21 +115,21 @@ module Sensu::Extension
           tags = create_tags(client_tags.merge(check_tags))
         end
 
-        point_set = [] # Used to store the tags & field set in the format point_set = [ {tags: {}, fields: {}, timestamp:<timestamp>}, {tags: {}, fields: {}, timestamp: <timestamp>}, ... ]
-        # timestamp = nil # Store the time stamp of any one field
+        point_set = [] # Used to store the tags & field set in the format point_set = [ {measurement: <measurement_name>, tags: {}, fields: {}, timestamp:<timestamp>}, {tags: {}, fields: {}, timestamp: <timestamp>}, ... ]
         key_array = [] # Used to store metric parts thereby access prefix
-
+        output_formats = []
+        measurement = event['check']['name'] if event['check']['name']
         output.split(/\r\n|\n/).each do |point|
           if not handler["proxy_mode"]
-            measurement, field_value, timestamp = point.scan(/'([^']+)'|"([^"]+)"|(\S+)/).flatten.compact
+            buckets, field_value, timestamp = point.scan(/'([^']+)'|"([^"]+)"|(\S+)/).flatten.compact
 
             # Accept string fields
             string_fields = []
             string_fields = event['check']['influxdb']['string_fields'] if event['check']['influxdb'] && event['check']['influxdb']['string_fields']
-            field_value = (!is_number?(field_value) || string_fields.any? { |f| measurement.include? f }) ? "\"#{field_value}\"" : field_value
-
-            key_array = measurement.split('.')
-            next if event['check']['influxdb']['ignore_fields'].any? { |f| measurement[f] } if event['check']['influxdb'] && event['check']['influxdb']['ignore_fields']
+            field_value = (!is_number?(field_value) || string_fields.any? { |f| buckets.include? f }) ? "\"#{field_value}\"" : field_value
+            measurement = event['check']['name']
+            key_array = buckets.split('.')
+            next if event['check']['influxdb']['ignore_fields'].any? { |f| buckets[f] } if event['check']['influxdb'] && event['check']['influxdb']['ignore_fields']
 
             if not is_number?(timestamp)
               @logger.debug("invalid timestamp, skipping line in event #{event}")
@@ -136,8 +137,8 @@ module Sensu::Extension
             end
 
             # Get event output tags
-            if measurement.include?('eventtags')
-              only_measurement, tagstub = measurement.split('.eventtags.',2)
+            if buckets.include?('eventtags')
+              only_measurement, tagstub = buckets.split('.eventtags.',2)
               event_tags = Hash.new()
               tagstub.split('.').each_slice(2) do |key, value|
                 event_tags[key] = value
@@ -146,17 +147,40 @@ module Sensu::Extension
               tags = create_tags(client_tags.merge(check_tags).merge(event_tags))
             end
 
-            # Allow Output formats
+            # List output formats by measurements
+            custom_formats = []
+            handler['custom_measurements'].each do |sfs|
+              if sfs[:apply_only_for_checks]
+                next unless sfs[:apply_only_for_checks].include? event['check']['name'] # Match wih checks
+              end
+              sfs[:measurement_formats].each do |f|
+                custom_formats << {sfs[:measurement_name] => f}
+              end
+            end
+
+            # Allow Output formats, with custom_format has priority
             output_formats = event['check']['influxdb']['output_formats'] if event['check']['influxdb'] && event['check']['influxdb']['output_formats']
+            
+            output_formats = custom_formats + output_formats
+            p output_formats if event['check']['name'] == 'random1'
             custom_tags = {}
-            metric = measurement
+            metric = buckets
 
             if output_formats
               output_formats_matched = false
-              output_formats.each do |format|
+              output_formats.each_with_index do |format_object|
                 break if output_formats_matched
+
+                format = format_object # No change when it is string
+                custom_measurement_name = nil
+                if format_object.is_a?(Hash)
+                  custom_measurement_name = format_object.keys[0]
+                  format = format_object[format_object.keys[0]]
+                end
                 format_array = format.split('.')
-                next unless (format_array.length == key_array.length or format_array.include? 'metric*')
+
+                # Check matching format
+                next unless match_formats?(format_array, key_array, {custom_measurement_name: custom_measurement_name})
                 output_formats_matched = true
                 format_array.zip(key_array).each do |k, v|
                   next if k == '_' # Ignore tagging when using _ placeholder.
@@ -165,9 +189,15 @@ module Sensu::Extension
                     next
                   end
                   if k == 'metric*'
-                    metric = measurement[/(#{v}.*)/] # Extract all parts from here
+                    metric = buckets[/(#{v}\..*|#{v}$)/] # Extract all metric* part & avoid greedy
                     break
                   end
+
+                  if k == 'measurement'
+                    measurement = v
+                    next
+                  end
+
                   custom_tags[k] = v
                 end
               end
@@ -178,7 +208,7 @@ module Sensu::Extension
             # Check already tags present in point set.
             tags_timestamp_match = false
             point_set.each do |point|
-              if point['tags'] == custom_tags && point['timestamp'] == timestamp
+              if point['tags'] == custom_tags && point['timestamp'] == timestamp && point['measurement'] == measurement
                 point['fields'][metric] = field_value
                 tags_timestamp_match = true
                 break
@@ -187,20 +217,17 @@ module Sensu::Extension
 
             # Create the new tag set if point_set tags not match
             unless tags_timestamp_match
-              point_set << {'tags' => custom_tags, 'fields' => {metric => field_value}, 'timestamp' => timestamp }
+              point_set << {'measurement' => measurement, 'tags' => custom_tags, 'fields' => {metric => field_value}, 'timestamp' => timestamp }
             end
           else
             handler["buffer"].push(point)
           end
         end
-        if event['check']['name']
-          measurement = event['check']['name'] == 'statsd' ? key_array[0] : event['check']['name']
-        end
         point_set.each do |point|
           tags = create_tags(client_tags.merge(check_tags).merge(point['tags'])) # metric tags are ignored and moved to field
           fields = point['fields'].map{|k,v| "#{k}=#{v}"}.join(',')
           timestamp = point['timestamp']
-          point = "#{measurement}#{tags} #{fields} #{timestamp}"
+          point = "#{point['measurement']}#{tags} #{fields} #{timestamp}"
           handler["buffer"].push(point)
           @logger.debug("#{@@extension_name}: stored point in buffer (#{handler['buffer'].length}/#{handler['buffer_size']})")
         end
@@ -271,6 +298,18 @@ module Sensu::Extension
 
     def is_number?(input)
       true if Float(input) rescue false
+    end
+    
+    def match_formats?(format_array, key_array, criteria)
+      return (format_array.length == key_array.length or format_array.include? 'metric*') unless format_array.include? 'measurement'
+
+      # For measurement criteria
+      matched = false
+      format_array.zip(key_array).each do |k,v|
+        return false if (k == nil or v == nil) # Anyone becomes nill
+        matched = (k == 'measurement') ? v == criteria[:custom_measurement_name] : matched
+      end
+      return matched
     end
   end
 end
