@@ -62,6 +62,7 @@ Example of a minimal configuration file
 | username                     |                  none |
 | password                     |                  none |
 | additional_handlers (\*\*\*) |                  none |
+| custom_measurements          |                  none |
 
 (\*) Optional file with trusted CA certificates  
 (\*\*) s = seconds. Other valid options are n, u, ms, m, h. See [influxdb docs](https://influxdb.com/docs/v0.9/write_protocols/write_syntax.html) for more details  
@@ -328,6 +329,21 @@ yields
 measurement = check_name, type=downloads, version="1.0",android=52 timestamp = 1476047752
 measurement = check_name, type=mail, others=12 timestamp = 1476047752
 ```
+
+### Customized format option based on measurement
+Provide custom format option in below JSON format
+```
+custom_measurements = [
+  {
+    "measurement_name": "measurement_name",
+     "measurement_formats": [<List of format(s)>],
+     "apply_only_for_checks": [<List of Check(s) to apply>]
+  }
+]
+```
+apply_only_for_checks - Optional, By default apply to all checks
+
+It can be added to influxdb formats additionally.
 
 ## Performance
 
