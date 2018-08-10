@@ -178,6 +178,7 @@ module Sensu::Extension
                 # Check matching format
                 next unless match_formats?(format_array, key_array, {custom_measurement_name: custom_measurement_name})
                 output_formats_matched = true
+                measurement = custom_measurement_name if custom_measurement_name
                 format_array.zip(key_array).each do |k, v|
                   next if k == '_' # Ignore tagging when using _ placeholder.
                   if k == 'metric'
@@ -189,11 +190,9 @@ module Sensu::Extension
                     break
                   end
 
-                  if k == 'measurement'
-                    measurement = v
-                    next
-                  end
-
+                  # Add to tags if enclosed in << >> in fixed keyword
+                  fixed_keyword_tag = /^<(.*)>$/.match k
+                  next if fixed_keyword_tag
                   custom_tags[k] = v
                 end
               end
@@ -297,13 +296,14 @@ module Sensu::Extension
     end
     
     def match_formats?(format_array, key_array, criteria)
-      return (format_array.length == key_array.length or format_array.include? 'metric*') unless format_array.include? 'measurement'
+      return (format_array.length == key_array.length or format_array.include? 'metric*') if format_array.select { |i| i[/^<.*>$/] }.empty?
 
       # For measurement criteria
       matched = false
       format_array.zip(key_array).each do |k,v|
         return false if (k == nil or v == nil) # Anyone becomes nill
-        matched = (k == 'measurement') ? v == criteria[:custom_measurement_name] : matched
+        fixed_keyword = /^<(.*)>$/.match k
+        matched = (fixed_keyword) ? v == fixed_keyword[1] : matched
       end
       return matched
     end
