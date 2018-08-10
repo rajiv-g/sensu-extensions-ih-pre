@@ -17,7 +17,8 @@ describe "Sensu::Extension::InfluxDB" do
           {:measurement_name => 'measurement2', :measurement_formats => ['_._.<match2>.htype.metric*','_.<match3>.htype.metric*']},
           {:measurement_name => 'measurement3', :measurement_formats => ['_._.<match4>.metric'], :apply_only_for_checks => ['other']},
           {:measurement_name => 'measurement_all', :measurement_formats => ['_._.<match_all>.metric']},
-          {:measurement_name => 'measurement_tag', :measurement_formats => ['_._.<match_tag>.metric']},
+          {:measurement_name => 'measurement_default', :measurement_formats => ['_._.<match_default>.metric']},
+          {:measurement_name => 'measurement_with_tag', :measurement_formats => ['_._.<match_tag|tag_name>.metric']},
         ]
     }
     @extension.settings["proxy"] = {
@@ -489,7 +490,7 @@ describe "Sensu::Extension::InfluxDB" do
       },
       "check" => {
         "name" => "statsd",
-        "output" => "statsd.timers.match_tag.metric1 1.0 1480697845",
+        "output" => "statsd.timers.match_default.metric1 1.0 1480697845",
         "influxdb" => {"output_formats" => ['_._.type.metric']}
       }
     }
@@ -497,7 +498,7 @@ describe "Sensu::Extension::InfluxDB" do
     @extension.run(event.to_json) do end
 
     buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
-    expect(buffer[0]).to eq("measurement_tag metric1=1.0 1480697845")
+    expect(buffer[0]).to eq("measurement_default metric1=1.0 1480697845")
   end
 
   it "Ensure Measurement to default formats if doesnt match in measurement priority" do
@@ -591,6 +592,62 @@ describe "Sensu::Extension::InfluxDB" do
     buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
     expect(buffer[0]).to eq("embedded metric1=1.0 1480697845")
     expect(buffer[1]).to eq("random1,type=tag metric1=1.0 1480697845")
+  end
+
+  it "Accept match keyword as tag" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "random1",
+        "output" => "statsd.timers.tag1.metric1 1.0 1480697845\nstatsd.timers.tag.metric1 1.0 1480697845",
+        "influxdb" => {"output_formats" => [{measurement_name: 'embedded', measurement_formats: ['_._.<tag1|tag_name>.metric']}, '_._.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("embedded,tag_name=tag1 metric1=1.0 1480697845")
+    expect(buffer[1]).to eq("random1,type=tag metric1=1.0 1480697845")
+  end
+
+  it "Accept match keyword as tag" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "random1",
+        "output" => "statsd.timers.tag1.metric1 1.0 1480697845\nstatsd.timers.tag.metric1 1.0 1480697845",
+        "influxdb" => {"output_formats" => [{measurement_name: 'embedded', measurement_formats: ['_._.<tag1|tag_name>.metric']}, '_._.type.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("embedded,tag_name=tag1 metric1=1.0 1480697845")
+    expect(buffer[1]).to eq("random1,type=tag metric1=1.0 1480697845")
+  end
+
+  it "Ensure match keyword as tag in measurement formats" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "statsd",
+        "output" => "statsd.timers.match_tag.metric1 1.0 1480697845",
+        "influxdb" => {"output_formats" => ['_._.tag_name.metric']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("measurement_with_tag,tag_name=match_tag metric1=1.0 1480697845")
   end
 
   it "does not modify input in proxy mode" do
