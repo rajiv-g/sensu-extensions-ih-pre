@@ -330,8 +330,41 @@ measurement = check_name, type=downloads, version="1.0",android=52 timestamp = 1
 measurement = check_name, type=mail, others=12 timestamp = 1476047752
 ```
 
+### Accept Keyword match
+Example:
+
+```
+host1.downloads.iOS 26 1476047752
+host1.downloads.android 52 1476047752
+host2.mail.others 12 1476047752
+```
+with format option
+
+```
+['_.<mail>.metric']
+```
+
+yields in InfluxDB format as (Only match the constant `'mail'`)
+
+```
+measurement_name others=12 1476047752
+```
+#### Accept Keyword match as tag
+
+Above with format option
+
+```
+['_.<mail|tag_name>.metric']
+```
+
+yields in InfluxDB format as (match keyword and assign to tag specified)
+
+```
+measurement_name,tag_name=mail others=12 1476047752
+```
+
 ### Customized format option based on measurement
-Provide custom format option in below JSON format
+Provide custom format option in below JSON format in InfluxDB configuration/settings file
 ```
 custom_measurements = [
   {
