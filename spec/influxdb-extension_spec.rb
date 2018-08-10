@@ -13,11 +13,11 @@ describe "Sensu::Extension::InfluxDB" do
         :buffer_size => 5,
         :buffer_max_age => 1,
         :custom_measurements => [
-          {:measurement_name => 'measurement1', :measurement_formats => ['_._.measurement.htype.metric*', '_.measurement.metric*'], :apply_only_for_checks => ['statsd']},
-          {:measurement_name => 'measurement2', :measurement_formats => ['_._.measurement.htype.metric*','_.measurement.htype.metric*']},
-          {:measurement_name => 'measurement3', :measurement_formats => ['_._.measurement.metric'], :apply_only_for_checks => ['other']},
-          {:measurement_name => 'measurement_all', :measurement_formats => ['_._.measurement.metric']},
-          {:measurement_name => 'measurement_tag', :measurement_formats => ['_._.measurement.metric']},
+          {:measurement_name => 'measurement1', :measurement_formats => ['_._.<match1>.htype.metric*', '_.<match1>.metric*'], :apply_only_for_checks => ['statsd']},
+          {:measurement_name => 'measurement2', :measurement_formats => ['_._.<match2>.htype.metric*','_.<match3>.htype.metric*']},
+          {:measurement_name => 'measurement3', :measurement_formats => ['_._.<match4>.metric'], :apply_only_for_checks => ['other']},
+          {:measurement_name => 'measurement_all', :measurement_formats => ['_._.<match_all>.metric']},
+          {:measurement_name => 'measurement_tag', :measurement_formats => ['_._.<match_tag>.metric']},
         ]
     }
     @extension.settings["proxy"] = {
@@ -468,7 +468,7 @@ describe "Sensu::Extension::InfluxDB" do
       },
       "check" => {
         "name" => "statsd",
-        "output" => "statsd.timers.measurement1.env1.a.b.c 1.0 1480697845\nstatsd.timers.measurement1.env1.a.b.c.d 2.0 1480697845\nstatsd.measurement1.p.q 10.0 1480697845\nstatsd.gauges.measurement2.env1.a 2.3 1480697845\nstatsd.measurement2.env1.b 2.3 1480697845\nstatsd.others.env1.a 1.0 1480697845\n",
+        "output" => "statsd.timers.match1.env1.a.b.c 1.0 1480697845\nstatsd.timers.match1.env1.a.b.c.d 2.0 1480697845\nstatsd.match1.p.q 10.0 1480697845\nstatsd.gauges.match2.env1.a 2.3 1480697845\nstatsd.match3.env1.b 2.3 1480697845\nstatsd.others.env1.a 1.0 1480697845\n",
         "influxdb" => {"output_formats" => ['_._.type.metric*']}
       }
     }
@@ -489,7 +489,7 @@ describe "Sensu::Extension::InfluxDB" do
       },
       "check" => {
         "name" => "statsd",
-        "output" => "statsd.timers.measurement_tag.metric1 1.0 1480697845",
+        "output" => "statsd.timers.match_tag.metric1 1.0 1480697845",
         "influxdb" => {"output_formats" => ['_._.type.metric']}
       }
     }
@@ -525,7 +525,7 @@ describe "Sensu::Extension::InfluxDB" do
       },
       "check" => {
         "name" => "other",
-        "output" => "statsd.timers.tag2.metric1 1.0 1480697845\nstatsd.timers.measurement3.metric1 1.0 1480697845",
+        "output" => "statsd.timers.tag2.metric1 1.0 1480697845\nstatsd.timers.match4.metric1 1.0 1480697845",
         "influxdb" => {"output_formats" => ['_._.type.metric']}
       }
     }
@@ -544,7 +544,7 @@ describe "Sensu::Extension::InfluxDB" do
       },
       "check" => {
         "name" => "other1",
-        "output" => "statsd.timers.tag2.metric1 1.0 1480697845\nstatsd.timers.measurement3.metric1 1.0 1480697845",
+        "output" => "statsd.timers.tag2.metric1 1.0 1480697845\nstatsd.timers.match3.metric1 1.0 1480697845",
         "influxdb" => {"output_formats" => ['_._.type.metric']}
       }
     }
@@ -553,7 +553,7 @@ describe "Sensu::Extension::InfluxDB" do
 
     buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
     expect(buffer[0]).to eq("other1,type=tag2 metric1=1.0 1480697845")
-    expect(buffer[1]).to eq("other1,type=measurement3 metric1=1.0 1480697845")
+    expect(buffer[1]).to eq("other1,type=match3 metric1=1.0 1480697845")
   end
 
   it "Ensure Measurement filter applied to all checks if not specified" do
@@ -563,7 +563,7 @@ describe "Sensu::Extension::InfluxDB" do
       },
       "check" => {
         "name" => "random",
-        "output" => "statsd.timers.measurement_all.metric1 1.0 1480697845",
+        "output" => "statsd.timers.match_all.metric1 1.0 1480697845",
         "influxdb" => {"output_formats" => ['_._.type.metric']}
       }
     }
@@ -582,7 +582,7 @@ describe "Sensu::Extension::InfluxDB" do
       "check" => {
         "name" => "random1",
         "output" => "statsd.timers.embedded.metric1 1.0 1480697845\nstatsd.timers.tag.metric1 1.0 1480697845",
-        "influxdb" => {"output_formats" => [{measurement_name: 'embedded', measurement_formats: ['_._.measurement.metric']}, '_._.type.metric']}
+        "influxdb" => {"output_formats" => [{measurement_name: 'embedded', measurement_formats: ['_._.<embedded>.metric']}, '_._.type.metric']}
       }
     }
 
