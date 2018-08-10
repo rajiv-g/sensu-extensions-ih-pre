@@ -191,8 +191,11 @@ module Sensu::Extension
                   end
 
                   # Add to tags if enclosed in << >> in fixed keyword
-                  fixed_keyword_tag = /^<(.*)>$/.match k
-                  next if fixed_keyword_tag
+                  fixed_keyword = /^<(.*)>$/.match k # Matches only '<text>' but not '<<text>>' or 'text'
+                  if fixed_keyword
+                    k = fixed_keyword[1].split('|')[1] # assign tag_name here as key
+                    next unless k # Skip if tag name not given
+                  end
                   custom_tags[k] = v
                 end
               end
@@ -303,7 +306,7 @@ module Sensu::Extension
       format_array.zip(key_array).each do |k,v|
         return false if (k == nil or v == nil) # Anyone becomes nill
         fixed_keyword = /^<(.*)>$/.match k
-        matched = (fixed_keyword) ? v == fixed_keyword[1] : matched
+        matched = (fixed_keyword) ? v == fixed_keyword[1].split('|')[0] : matched
       end
       return matched
     end
