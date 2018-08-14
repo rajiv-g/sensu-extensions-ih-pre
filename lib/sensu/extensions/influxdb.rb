@@ -148,14 +148,14 @@ module Sensu::Extension
             end
 
             # output formats by measurements
-            custom_formats = process_measurent_formats(handler['custom_measurements'], event['check']['name'])
+            custom_formats = process_measurement_formats(handler['custom_measurements'], event['check']['name'])
             
             # Allow Output formats, with custom_format has priority
             processed_output_formats = []
             raw_output_formats = []
             raw_output_formats = event['check']['influxdb']['output_formats'] if event['check']['influxdb'] && event['check']['influxdb']['output_formats']
             raw_output_formats.each do |mformat|
-              processed_output_formats += (mformat.is_a?(Hash) ? process_measurent_formats([mformat], event['check']['name']) : [mformat])
+              processed_output_formats += (mformat.is_a?(Hash) ? process_measurement_formats([mformat], event['check']['name']) : [mformat])
             end
 
             output_formats = custom_formats + processed_output_formats
@@ -311,7 +311,7 @@ module Sensu::Extension
       return matched
     end
 
-    def process_measurent_formats(measurement_formats, check_name)
+    def process_measurement_formats(measurement_formats, check_name)
       custom_format = []
       measurement_formats = symbolize(measurement_formats)
       measurement_formats.each do |sfs|
