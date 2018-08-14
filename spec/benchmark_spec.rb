@@ -47,7 +47,7 @@ describe "Sensu::Extension::InfluxDB" do
 
     @extension.run(event.to_json) do end
 
-    expect { @extension.run(event.to_json) do end }.to perform_under(0.01).and_sample(1000)
+    expect { @extension.run(event.to_json) do end }.to perform_under(5).ms.and_sample(100)
     #expect { @extension.run(event.to_json) do end }.to perform_at_least(1000).ips
   end
 
