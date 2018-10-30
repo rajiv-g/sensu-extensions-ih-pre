@@ -650,6 +650,45 @@ describe "Sensu::Extension::InfluxDB" do
     expect(buffer[0]).to eq("measurement_with_tag,tag_name=match_tag metric1=1.0 1480697845")
   end
 
+  it "Extract metric* correctly" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "random",
+        "output" => "statsd.gauges.introhive.hive.active 1.0 1480697845\nhive.hive.user 1.0 1480697845\nhive 1.0 1480697845",
+        "influxdb" => {"output_formats" => ['_._.tag_name.metric*', 'tag_name.metric*']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("random,tag_name=introhive hive.active=1.0 1480697845")
+    expect(buffer[1]).to eq("random,tag_name=hive hive.user=1.0 1480697845")
+    expect(buffer[2]).to eq("random hive=1.0 1480697845")
+  end
+
+  it "Accept multiple keyword match correctly" do
+    event = {
+      "client" => {
+        "name" => "rspec"
+      },
+      "check" => {
+        "name" => "random",
+        "output" => "statsd.gauges.introhive.hive1.active 1.0 1480697845\nstatsd.gauges.introhive.hive.active_users 2.0 1480697845",
+        "influxdb" => {"output_formats" => ['_._.<introhive>.<hive|hive>.metric*', '_._.<introhive>.metric*']}
+      }
+    }
+
+    @extension.run(event.to_json) do end
+
+    buffer = @extension.instance_variable_get("@handlers")["influxdb-extension"]["buffer"]
+    expect(buffer[0]).to eq("random hive1.active=1.0 1480697845")
+    expect(buffer[1]).to eq("random,hive=hive active_users=2.0 1480697845")
+  end
+
   it "does not modify input in proxy mode" do
     @extension.run(minimal_event_proxy.to_json) do end
 
