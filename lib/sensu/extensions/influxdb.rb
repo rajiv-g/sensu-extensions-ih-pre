@@ -129,6 +129,8 @@ module Sensu::Extension
             output_formats = []
             measurement = event['check']['name']
             key_array = buckets.split('.')
+            bucket_processing = -1 # Pointer to extract fields for metric*
+
             next if event['check']['influxdb']['ignore_fields'].any? { |f| buckets[f] } if event['check']['influxdb'] && event['check']['influxdb']['ignore_fields']
 
             if not is_number?(timestamp)
@@ -148,14 +150,14 @@ module Sensu::Extension
             end
 
             # output formats by measurements
-            custom_formats = process_measurent_formats(handler['custom_measurements'], event['check']['name'])
+            custom_formats = process_measurement_formats(handler['custom_measurements'], event['check']['name'])
             
             # Allow Output formats, with custom_format has priority
             processed_output_formats = []
             raw_output_formats = []
             raw_output_formats = event['check']['influxdb']['output_formats'] if event['check']['influxdb'] && event['check']['influxdb']['output_formats']
             raw_output_formats.each do |mformat|
-              processed_output_formats += (mformat.is_a?(Hash) ? process_measurent_formats([mformat], event['check']['name']) : [mformat])
+              processed_output_formats += (mformat.is_a?(Hash) ? process_measurement_formats([mformat], event['check']['name']) : [mformat])
             end
 
             output_formats = custom_formats + processed_output_formats
@@ -180,13 +182,16 @@ module Sensu::Extension
                 output_formats_matched = true
                 measurement = custom_measurement_name if custom_measurement_name
                 format_array.zip(key_array).each do |k, v|
+                  #p key_array if key_array == ["statsd", "gauges", "3-introhive", "hive", "is_active"]
+                  bucket_processing += 1 # Point to current value
+
                   next if k == '_' # Ignore tagging when using _ placeholder.
                   if k == 'metric'
                     metric = v
                     next
                   end
                   if k == 'metric*'
-                    metric = buckets[/(#{v}\..*|#{v}$)/] # Extract all metric* part & avoid greedy
+                    metric = key_array[bucket_processing..-1].join('.') # Extract all metric* part
                     break
                   end
 
@@ -197,6 +202,7 @@ module Sensu::Extension
                     next unless k # Skip if tag name not given
                   end
                   custom_tags[k] = v
+
                 end
               end
             else
@@ -299,19 +305,20 @@ module Sensu::Extension
     end
     
     def match_formats?(format_array, key_array, criteria)
-      return (format_array.length == key_array.length or format_array.include? 'metric*') if format_array.select { |i| i[/^<.*>$/] }.empty?
+      return (format_array.length == key_array.length or (format_array.include? 'metric*' and key_array.length >= format_array.length)) if format_array.select { |i| i[/^<.*>$/] }.empty?
 
       # For measurement criteria
-      matched = false
+      matched = true
       format_array.zip(key_array).each do |k,v|
         return false if (k == nil or v == nil) # Anyone becomes nill
         fixed_keyword = /^<(.*)>$/.match k
         matched = (fixed_keyword) ? v == fixed_keyword[1].split('|')[0] : matched
+        return false unless matched
       end
       return matched
     end
 
-    def process_measurent_formats(measurement_formats, check_name)
+    def process_measurement_formats(measurement_formats, check_name)
       custom_format = []
       measurement_formats = symbolize(measurement_formats)
       measurement_formats.each do |sfs|
