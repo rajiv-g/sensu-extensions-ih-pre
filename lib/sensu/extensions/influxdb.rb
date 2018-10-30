@@ -202,6 +202,7 @@ module Sensu::Extension
                     next unless k # Skip if tag name not given
                   end
                   custom_tags[k] = v
+
                 end
               end
             else
@@ -304,14 +305,15 @@ module Sensu::Extension
     end
     
     def match_formats?(format_array, key_array, criteria)
-      return (format_array.length == key_array.length or format_array.include? 'metric*') if format_array.select { |i| i[/^<.*>$/] }.empty?
+      return (format_array.length == key_array.length or (format_array.include? 'metric*' and key_array.length >= format_array.length)) if format_array.select { |i| i[/^<.*>$/] }.empty?
 
       # For measurement criteria
-      matched = false
+      matched = true
       format_array.zip(key_array).each do |k,v|
         return false if (k == nil or v == nil) # Anyone becomes nill
         fixed_keyword = /^<(.*)>$/.match k
         matched = (fixed_keyword) ? v == fixed_keyword[1].split('|')[0] : matched
+        return false unless matched
       end
       return matched
     end
