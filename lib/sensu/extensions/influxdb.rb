@@ -129,6 +129,8 @@ module Sensu::Extension
             output_formats = []
             measurement = event['check']['name']
             key_array = buckets.split('.')
+            bucket_processing = -1 # Pointer to extract fields for metric*
+
             next if event['check']['influxdb']['ignore_fields'].any? { |f| buckets[f] } if event['check']['influxdb'] && event['check']['influxdb']['ignore_fields']
 
             if not is_number?(timestamp)
@@ -180,13 +182,16 @@ module Sensu::Extension
                 output_formats_matched = true
                 measurement = custom_measurement_name if custom_measurement_name
                 format_array.zip(key_array).each do |k, v|
+                  #p key_array if key_array == ["statsd", "gauges", "3-introhive", "hive", "is_active"]
+                  bucket_processing += 1 # Point to current value
+
                   next if k == '_' # Ignore tagging when using _ placeholder.
                   if k == 'metric'
                     metric = v
                     next
                   end
                   if k == 'metric*'
-                    metric = buckets[/(#{v}\..*|#{v}$)/] # Extract all metric* part & avoid greedy
+                    metric = key_array[bucket_processing..-1].join('.') # Extract all metric* part
                     break
                   end
 
