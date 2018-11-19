@@ -141,59 +141,10 @@ Example check definition:
         "mytag": "xyz"
       }
     } 
-=======
-# Sensu::Extensions::Occurrences
-
-This filter extension provides the Sensu Core built-in filter
-`occurrences`.
-
-This filter provides the functionality that will soon be removed from
-the sensu-plugin handler library. Cameron Johnston wrote a great blog
-post on this topic, [Deprecating Event Filtering in
-sensu-plugin](https://sensuapp.org/blog/2016/07/07/sensu-plugin-filter-deprecation.html).
-
-The `occurrences` filter will determine if an event occurrence count
-meets the user defined requirements in the event check definition.
-Users can specify a minimum number of `occurrences` before an event
-will be passed to a handler. Users can also specify a `refresh` time,
-in seconds, to reset where recurrences are counted from.
-
-[![Build Status](https://travis-ci.org/sensu-extensions/sensu-extensions-occurrences.svg?branch=master)](https://travis-ci.org/sensu/sensu-extensions-occurrences)
-
-## Configuration
-
-The `occurrences` filter is included in every install of Sensu. To
-apply the filter to handler, use the `"filter"` or `"filters"` handler
-definition attribute.
-
-For example:
-
-``` json
-{
-  "handlers": {
-    "email": {
-      "...": "...",
-      "filter": "occurrences"
-    }
   }
 }
 ```
 
-or
-
-``` json
-{
-  "handlers": {
-    "email": {
-      "...": "...",
-      "filters": ["occurrences"]
-    }
->>>>>>> alert_once
-  }
-}
-```
-
-<<<<<<< HEAD
 ... will turn into the following tags for that point: **,environment=dev,application=myapp,hostname=my-app-in-env.domain.tld,mytag=xyz**
 
 If both the client and the check tags have the same key, the one defined on the check will overwrite/win the merge.
